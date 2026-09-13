@@ -43,9 +43,9 @@ implementation code.
 11. Development starts with a local workflow. Credentials are read from a
     local configuration file that is ignored by Git; the same settings will
     later be mapped to GitHub Actions secrets and variables.
-12. A local browser UI shows source records, target Notion properties, and
-    create/update/deleted actions. Synchronization starts automatically when
-    the local service starts; the UI does not require an approval click.
+12. The browser UI prototype is deprecated and is not part of the runtime. The
+    local CLI emits source records, target actions, and errors as a structured
+    result; synchronization starts automatically without an approval click.
 
 ## Consequences
 

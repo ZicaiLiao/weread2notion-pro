@@ -8,7 +8,7 @@ reading activity.
 ## Notion Parent Page
 
 The existing Notion page shared with the integration under which the
-application creates the Books, Highlights, and Reading Sessions databases.
+application creates the Books, Annotations, and Reading Days databases.
 
 ## Books Database
 
@@ -46,16 +46,15 @@ is marked as deleted instead of being removed.
 The explicit workflow configuration selecting either frequent synchronization
 or daily synchronization.
 
-## Sync Preview
+## Sync Result
 
-The local UI view that compares source records with their planned Notion
-representation before any write operation occurs.
+The structured result emitted by the CLI after a run, including status, counts,
+database IDs, record actions, and safe error messages.
 
 ## Automatic Sync Start
 
-The local service starts a synchronization in the background after loading a
-valid configuration. The UI reports its progress and result but does not gate
-the write operation.
+The CLI starts synchronization immediately after loading a valid
+configuration. There is no approval gate or UI dependency.
 
 ## Source Identity
 

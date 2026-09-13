@@ -10,6 +10,7 @@ localized later without changing source identity or sync behavior.
 |---|---|---|
 | Name | title | Book title |
 | Source ID | rich_text | `book:<bookId>` |
+| Fingerprint | rich_text | Hash of source-owned fields used for unchanged detection |
 | Author | rich_text | Author name |
 | Category | select | Source category |
 | Cover | url | Cover image URL |
@@ -65,6 +66,6 @@ localized later without changing source identity or sync behavior.
   filter.
 - No separate Chapters database: chapter fields live on Annotations.
 - No separate Sync Runs database in the first version: run state and errors
-  remain in the local UI and process log until an audit history is needed.
+  remain in the CLI JSON result and process log until an audit history is needed.
 - Reading Days do not relate to Books because the supported reading statistics
   interface does not provide reliable per-book daily duration.

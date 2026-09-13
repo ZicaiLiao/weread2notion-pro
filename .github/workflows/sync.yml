@@ -1,0 +1,63 @@
+name: Sync WeRead to Notion
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */2 * * *"
+    - cron: "0 17 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weread-to-notion-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # Keep both cron choices in one workflow. SCHEDULE_MODE selects the
+    # enabled cadence without changing the synchronization implementation.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+      (github.event.schedule == '0 */2 * * *' &&
+      (vars.SCHEDULE_MODE || 'daily') == 'frequent') ||
+      (github.event.schedule == '0 17 * * *' &&
+      (vars.SCHEDULE_MODE || 'daily') == 'daily') }}
+    runs-on: ubuntu-latest
+    env:
+      WEREAD_API_KEY: ${{ secrets.WEREAD_API_KEY }}
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_PARENT_PAGE_ID: ${{ secrets.NOTION_PARENT_PAGE_ID }}
+      SYNC_MODE: ${{ vars.SYNC_MODE || 'full' }}
+      SCHEDULE_MODE: ${{ vars.SCHEDULE_MODE || 'daily' }}
+      TIMEZONE: ${{ vars.TIMEZONE || 'Asia/Shanghai' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Write runtime configuration
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          values = {
+              "weread_api_key": os.environ["WEREAD_API_KEY"],
+              "notion_token": os.environ["NOTION_TOKEN"],
+              "notion_parent_page_id": os.environ["NOTION_PARENT_PAGE_ID"],
+              "sync_mode": os.environ["SYNC_MODE"],
+              "schedule_mode": os.environ["SCHEDULE_MODE"],
+              "timezone": os.environ["TIMEZONE"],
+          }
+          Path("config/runtime.toml").write_text(
+              "\n".join(f"{key} = {json.dumps(value)}" for key, value in values.items()) + "\n",
+              encoding="utf-8",
+          )
+          PY
+      - name: Run synchronization
+        run: python3 -m wread2notion --config config/runtime.toml --json
