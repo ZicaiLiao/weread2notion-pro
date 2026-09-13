@@ -121,14 +121,3 @@ def format_duration(seconds: Any) -> str:
     if hours:
         return f"{hours}小时{minutes}分钟"
     return f"{minutes}分钟"
-
-
-def weread_book_url(book_id: str) -> str:
-    return f"weread://reading?bId={book_id}"
-
-
-def weread_annotation_url(book_id: str, chapter_uid: Any, range_value: Any) -> str | None:
-    if chapter_uid in (None, "") or not range_value or "-" not in str(range_value):
-        return None
-    start, end = str(range_value).split("-", 1)
-    return f"weread://bestbookmark?bookId={book_id}&chapterUid={chapter_uid}&rangeStart={start}&rangeEnd={end}"

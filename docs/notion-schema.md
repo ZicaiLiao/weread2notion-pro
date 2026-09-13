@@ -19,7 +19,7 @@ localized later without changing source identity or sync behavior.
 | Current Chapter | rich_text | Current chapter UID or title |
 | Reading Seconds | number | Cumulative reading seconds |
 | Last Read | date | Last reading date |
-| WeRead URL | url | `weread://reading?...` deep link |
+| WeRead URL | url | Deep link returned by WeRead when available |
 | Sync Status | select | `正常` or `已删除` |
 | Source Updated | date | Source update timestamp |
 | Last Synced | date | Local sync timestamp |
@@ -39,7 +39,7 @@ localized later without changing source identity or sync behavior.
 | Range | rich_text | WeRead range when available |
 | Color | rich_text | Highlight color style when available |
 | Created At | date | Source creation timestamp |
-| WeRead URL | url | Deep link to the source location |
+| WeRead URL | url | Deep link returned by WeRead when available |
 | Sync Status | select | `正常` or `已删除` |
 | Source Updated | date | Source update timestamp |
 | Last Synced | date | Local sync timestamp |

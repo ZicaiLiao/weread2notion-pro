@@ -15,12 +15,10 @@ from .domain import (
     iso_date,
     iso_datetime,
     source_id,
-    weread_annotation_url,
-    weread_book_url,
 )
 
 
-SKILL_VERSION = "1.0.3"
+SKILL_VERSION = "1.0.4"
 
 
 class WeReadError(RuntimeError):
@@ -107,7 +105,7 @@ class WeReadClient:
                 "Current Chapter": "",
                 "Reading Seconds": 0,
                 "Last Read": iso_date(extra.get("lectureReadUpdateTime"), self.settings.timezone),
-                "WeRead URL": f"weread://reading?bId={album_id}",
+                "WeRead URL": info.get("deepLink") or album.get("deepLink"),
                 "Kind": "专辑",
                 "Source Updated": iso_datetime(info.get("updateTime"), self.settings.timezone),
                 "Sync Status": "正常",
@@ -193,7 +191,7 @@ class WeReadClient:
             "Current Chapter": str(progress.get("chapterUid", "")),
             "Reading Seconds": int(progress.get("recordReadingTime", 0) or 0),
             "Last Read": iso_date(progress.get("updateTime", raw.get("readUpdateTime")), self.settings.timezone),
-            "WeRead URL": weread_book_url(book_id),
+            "WeRead URL": raw.get("deepLink") or progress.get("deepLink"),
             "Kind": kind,
             "Source Updated": iso_datetime(raw.get("updateTime", raw.get("readUpdateTime")), self.settings.timezone),
             "Sync Status": "正常",
@@ -212,7 +210,7 @@ class WeReadClient:
             "Range": item.get("range", ""),
             "Color": str(item.get("colorStyle", "")),
             "Created At": iso_datetime(item.get("createTime"), self.settings.timezone),
-            "WeRead URL": weread_annotation_url(book_id, chapter_uid, item.get("range")),
+            "WeRead URL": item.get("deepLink"),
             "Source Updated": iso_datetime(item.get("createTime"), self.settings.timezone),
             "Sync Status": "正常",
         }
@@ -231,7 +229,7 @@ class WeReadClient:
             "Range": review.get("range", ""),
             "Color": "",
             "Created At": iso_datetime(review.get("createTime"), self.settings.timezone),
-            "WeRead URL": weread_annotation_url(book_id, chapter_uid, review.get("range")),
+            "WeRead URL": review.get("deepLink"),
             "Source Updated": iso_datetime(review.get("createTime"), self.settings.timezone),
             "Sync Status": "正常",
         }

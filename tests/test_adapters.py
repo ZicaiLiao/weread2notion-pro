@@ -99,7 +99,8 @@ class WeReadAdapterTests(unittest.TestCase):
 
         notebook_calls = [item for item in fixture.requests if item["api_name"] == "/user/notebooks"]
         self.assertEqual(notebook_calls[1]["lastSort"], 20)
-        self.assertTrue(all(item["skill_version"] == "1.0.3" for item in fixture.requests))
+        self.assertTrue(all(item["skill_version"] == "1.0.4" for item in fixture.requests))
+        self.assertIsNone(by_id["book:book-1"].fields["WeRead URL"])
 
     def test_upgrade_response_is_blocking(self):
         def opener(_request, **_kwargs):

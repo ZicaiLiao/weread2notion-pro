@@ -28,7 +28,7 @@ automatically when configuration is valid; there is no approval step.
 
 ## Source Data
 
-The WeRead Agent Gateway is called with `skill_version = 1.0.3` and business
+The WeRead Agent Gateway is called with `skill_version = 1.0.4` and business
 parameters at the top level of each request.
 
 - `/shelf/sync` supplies electronic books and albums.
