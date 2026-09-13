@@ -1,0 +1,7 @@
+config/local.toml
+__pycache__/
+.DS_Store
+.pytest_cache/
+.venv/
+venv/
+*.pyc

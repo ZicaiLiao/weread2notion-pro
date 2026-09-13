@@ -1,0 +1,7 @@
+# Copy this file to config/local.toml for the local integration phase.
+weread_api_key = ""
+notion_token = ""
+notion_parent_page_id = ""
+sync_mode = "full"
+schedule_mode = "daily"
+timezone = "Asia/Shanghai"

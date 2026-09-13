@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>微信读书 · 本地同步预览</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="global-bar">
+      <div class="global-brand"><span class="mini-logo">阅</span><strong>微信读书</strong></div>
+      <div class="global-actions">
+        <button class="plain-icon" id="searchButton" title="搜索" aria-label="搜索">⌕</button>
+        <span class="notion-badge">Built with Notion</span>
+      </div>
+    </header>
+
+    <div class="cover-strip" role="img" aria-label="书架背景"></div>
+
+    <main class="page-shell">
+      <div class="profile-row">
+        <div class="profile-mark" aria-hidden="true"><span>读</span><span>书</span><span>器</span></div>
+        <div>
+          <h1>微信读书</h1>
+          <p class="profile-subtitle">个人阅读空间 · Notion 同步预览</p>
+        </div>
+        <div class="profile-actions">
+          <span class="local-status"><i></i>本地预览</span>
+          <button class="quiet-button" id="refreshButton" title="刷新预览" aria-label="刷新预览">↻</button>
+          <button class="orange-button" id="approveButton">确认同步方案</button>
+        </div>
+      </div>
+
+      <div class="content-layout">
+        <section class="main-column">
+          <section class="heatmap-section">
+            <div class="section-heading compact-heading">
+              <div><strong>malinkang WeRead</strong><span>2024: 77 hours</span></div>
+              <div class="heatmap-actions"><button class="quiet-button" title="查看统计" aria-label="查看统计">◉</button><button class="quiet-button" title="更多操作" aria-label="更多操作">•••</button></div>
+            </div>
+            <div class="heatmap" id="heatmap" aria-label="年度阅读热度"></div>
+          </section>
+
+          <section class="books-section" id="booksSection">
+            <div class="section-heading">
+              <div><h2>书架</h2><p>源数据预览与同步去重状态</p></div>
+              <label class="mode-select"><span>同步范围</span><select id="modeSelect"><option value="full">首次全量</option><option value="incremental">后续增量</option></select></label>
+            </div>
+            <nav class="book-tabs" aria-label="书架筛选">
+              <button class="book-tab active" data-filter="all">▣ 全部</button>
+              <button class="book-tab" data-filter="finished">● 已读</button>
+              <button class="book-tab" data-filter="reading">▮ 在读</button>
+              <button class="book-tab" data-filter="想读">♥ 想读</button>
+              <button class="book-tab" data-filter="sync">▤ 同步计划</button>
+            </nav>
+            <div class="year-row"><button class="year-button">⌄ 2024</button><span class="book-total" id="bookTotal">24 本</span></div>
+            <div class="book-grid" id="bookGrid"></div>
+          </section>
+        </section>
+
+        <aside class="side-column">
+          <nav class="menu-panel" aria-label="页面导航">
+            <div class="side-title"><span class="menu-symbol">☷</span><strong>菜单</strong></div>
+            <button class="side-link active" data-side="books">书架</button>
+            <button class="side-link" data-side="notes">笔记</button>
+            <button class="side-link" data-side="highlights">划线</button>
+            <button class="side-link" data-side="stats">统计</button>
+            <button class="side-link" data-side="categories">分类</button>
+            <button class="side-link" data-side="authors">作者</button>
+            <button class="side-link" data-side="chapters">章节</button>
+            <div class="menu-divider"></div>
+            <button class="side-link sync-link" data-side="sync"><span class="sync-dot"></span>同步预览</button>
+          </nav>
+
+          <section class="stats-section">
+            <div class="side-section-title"><h2>统计</h2><button class="period-button">◌ 日⌄</button></div>
+            <article class="stat-card"><strong>◉ 2024年03月28日</strong><span>✅ 已读：<b>0</b> 本</span><span>📒 笔记：<b>0</b> 条</span><span>🖍 划线：<b>0</b> 条</span><span>⌛ 阅读时长：<em>6分</em></span><span class="pink-progress">阅读进度：■■■■■■■■■ 9%</span></article>
+            <div class="side-section-title month-title"><h3>◌ 周</h3></div>
+            <article class="stat-card"><strong>◉ 2024年第13周</strong><span>✅ 已读：<b>0</b> 本</span><span>📒 笔记：<b>0</b> 条</span><span>🖍 划线：<b>0</b> 条</span><span>⌛ 阅读时长：<em>11时22分</em></span><span class="pink-progress">阅读进度：■■■■■■■■■■ 162%</span></article>
+            <div class="side-section-title month-title"><h3>◌ 月</h3></div>
+            <article class="stat-card"><strong>◉ 2024年3月</strong><span>✅ 已读：<b>0</b> 本</span><span>📒 笔记：<b>0</b> 条</span><span>🖍 划线：<b>0</b> 条</span><span>⌛ 阅读时长：<em>55时3分</em></span><span class="pink-progress">阅读进度：■■■■■■■■■■ 177%</span></article>
+            <div class="side-section-title month-title"><h3>◌ 年</h3></div>
+            <article class="stat-card"><strong>◉ 2024</strong><span>✅ 已读：<b>1</b> 本</span><span>📒 笔记：<b>54</b> 条</span><span>🖍 划线：<b>4</b> 条</span><span>⌛ 阅读时长：<em>77时40分</em></span><span class="pink-progress">阅读进度：■■■■■■■■ 21%</span></article>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
