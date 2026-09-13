@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from http.client import IncompleteRead, RemoteDisconnected
 import json
 import time
 from typing import Any
@@ -76,7 +77,11 @@ class NotionClient:
                 retry_delay = _retry_after(exc)
                 delay = retry_delay if retry_delay is not None else min(2 ** attempt, 30)
                 time.sleep(delay)
-            except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+            except (urllib.error.URLError, IncompleteRead, RemoteDisconnected, ConnectionResetError, TimeoutError) as exc:
+                if attempt == 5:
+                    raise NotionError(f"Notion 网络请求失败: {exc}") from exc
+                time.sleep(min(2 ** attempt, 8))
+            except ValueError as exc:
                 raise NotionError(f"Notion 网络请求失败: {exc}") from exc
         raise NotionError(f"Notion 请求失败: {method} {path}")
 

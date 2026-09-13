@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from http.client import IncompleteRead, RemoteDisconnected
 import json
 import unittest
 import urllib.error
@@ -112,6 +113,42 @@ class WeReadAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(WeReadError, "请升级 skill"):
             WeReadClient(settings(), opener=opener).call("/shelf/sync")
 
+    def test_call_retries_transient_gateway_disconnect(self):
+        attempts = 0
+
+        def opener(_request, **_kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RemoteDisconnected("gateway closed the connection")
+            return FakeResponse({"books": [], "albums": []})
+
+        with patch("wread2notion.weread.time.sleep") as sleep:
+            response = WeReadClient(settings(), opener=opener).call("/shelf/sync")
+
+        self.assertEqual(response, {"books": [], "albums": []})
+        self.assertEqual(attempts, 2)
+        sleep.assert_called_once_with(1)
+
+    def test_call_retries_transient_http_499(self):
+        attempts = 0
+        headers = Message()
+        headers["Retry-After"] = "0"
+
+        def opener(_request, **_kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise urllib.error.HTTPError("https://weread.test/gateway", 499, "closed", headers, None)
+            return FakeResponse({"books": [], "albums": []})
+
+        with patch("wread2notion.weread.time.sleep") as sleep:
+            response = WeReadClient(settings(), opener=opener).call("/shelf/sync")
+
+        self.assertEqual(response, {"books": [], "albums": []})
+        self.assertEqual(attempts, 2)
+        sleep.assert_called_once_with(0)
+
 
 class NotionAdapterTests(unittest.TestCase):
     def test_schema_keeps_integer_progress_and_relation(self):
@@ -211,6 +248,23 @@ class NotionAdapterTests(unittest.TestCase):
 
         self.assertEqual(attempts, 2)
         sleep.assert_called_once_with(0.0)
+
+    def test_request_retries_transient_incomplete_read(self):
+        attempts = 0
+
+        def opener(_request, **_kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise IncompleteRead(b"")
+            return FakeResponse({"ok": True})
+
+        client = NotionClient("secret", opener=opener)
+        with patch("wread2notion.notion.time.sleep") as sleep:
+            self.assertEqual(client.request("GET", "/x"), {"ok": True})
+
+        self.assertEqual(attempts, 2)
+        sleep.assert_called_once_with(1)
 
     def test_dashboard_is_created_once_with_database_links(self):
         calls: list[tuple[str, dict]] = []

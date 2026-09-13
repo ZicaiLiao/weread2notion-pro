@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from http.client import RemoteDisconnected
 import json
+import time
 from typing import Any
 import urllib.error
 import urllib.request
@@ -30,6 +32,11 @@ class WeReadClient:
         self.settings = settings
         self.opener = opener
         self.context = _ssl_context()
+        # The gateway starts returning HTTP 499 after roughly one request per
+        # second in a sustained full snapshot. Keep the personal sync below
+        # that threshold while leaving injected test openers instantaneous.
+        self.request_interval = 1.0 if opener is urllib.request.urlopen else 0.0
+        self._last_request_at = 0.0
 
     def call(self, api_name: str, **params: Any) -> dict[str, Any]:
         body = {"api_name": api_name, **params, "skill_version": SKILL_VERSION}
@@ -43,13 +50,24 @@ class WeReadClient:
             },
             method="POST",
         )
-        try:
-            with self.opener(request, timeout=45, context=self.context) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            raise WeReadError(f"微信读书请求失败: HTTP {exc.code}") from exc
-        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-            raise WeReadError(f"微信读书网络请求失败: {exc}") from exc
+        for attempt in range(5):
+            try:
+                self._wait_for_request_slot()
+                with self.opener(request, timeout=45, context=self.context) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code not in {408, 425, 429, 499, 500, 502, 503, 504} or attempt == 4:
+                    raise WeReadError(f"微信读书请求失败: HTTP {exc.code}") from exc
+                time.sleep(_retry_delay(attempt, exc))
+            except (urllib.error.URLError, RemoteDisconnected, ConnectionResetError, TimeoutError) as exc:
+                if attempt == 4:
+                    raise WeReadError(f"微信读书网络请求失败: {exc}") from exc
+                time.sleep(_retry_delay(attempt))
+            except ValueError as exc:
+                raise WeReadError(f"微信读书返回了无效 JSON: {exc}") from exc
+        else:
+            raise WeReadError(f"微信读书请求失败: {api_name}")
 
         if not isinstance(payload, dict):
             raise WeReadError("微信读书返回了非对象 JSON")
@@ -72,6 +90,16 @@ class WeReadClient:
         if payload.get("errcode", 0) not in (0, "0", None):
             raise WeReadError(payload.get("errmsg", f"微信读书接口错误: {payload['errcode']}"))
         return payload
+
+    def _wait_for_request_slot(self) -> None:
+        if self.request_interval <= 0:
+            return
+        elapsed = time.monotonic() - self._last_request_at
+        delay = self.request_interval - elapsed
+        if delay > 0:
+            time.sleep(delay)
+        self._last_request_at = time.monotonic()
+
 
     def fetch_records(self, mode: str) -> list[NormalizedRecord]:
         shelf = self.call("/shelf/sync")
@@ -274,6 +302,15 @@ class WeReadClient:
             }
             result.append(NormalizedRecord("reading_days", "reading-day", source_id("reading-day", date_value), date_value, fields).with_fingerprint())
         return result
+
+
+def _retry_delay(attempt: int, error: urllib.error.HTTPError | None = None) -> int:
+    if error is not None and error.headers:
+        try:
+            return max(0, min(int(error.headers.get("Retry-After", "")), 60))
+        except (TypeError, ValueError):
+            pass
+    return min(2 ** attempt, 8)
 
 
 def _ssl_context() -> ssl.SSLContext:
