@@ -47,7 +47,7 @@ class GatewayFixture:
                 })
             return FakeResponse({
                 "books": [{"bookId": "book-2", "sort": 10, "book": {"title": "第二本"}}],
-                "hasMore": 0,
+                "hasMore": "0",
             })
         if api_name == "/book/getprogress":
             return FakeResponse({"book": {"progress": 42, "recordReadingTime": 125, "chapterUid": 7}})
@@ -65,7 +65,7 @@ class GatewayFixture:
                     "reviewId": "review-1", "content": "我的想法", "chapterName": "第一章",
                     "createTime": 1725000001,
                 }}],
-                "hasMore": 0,
+                "hasMore": "0",
                 "synckey": 1,
             })
         if api_name == "/readdata/detail" and payload["mode"] == "overall":

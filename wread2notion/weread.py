@@ -143,7 +143,7 @@ class WeReadClient:
                 params["lastSort"] = last_sort
             page = self.call("/user/notebooks", **params)
             result.extend(page.get("books", []))
-            if not page.get("hasMore"):
+            if not _has_more(page.get("hasMore")):
                 break
             page_books = page.get("books", [])
             if not page_books:
@@ -165,7 +165,7 @@ class WeReadClient:
         while True:
             page = self.call("/review/list/mine", bookid=book_id, synckey=synckey, count=100)
             result.extend(page.get("reviews", []))
-            if not page.get("hasMore"):
+            if not _has_more(page.get("hasMore")):
                 break
             next_key = page.get("synckey")
             if next_key in seen_keys or next_key is None:
@@ -304,3 +304,8 @@ def _deduplicate_records(records: list[NormalizedRecord]) -> list[NormalizedReco
     for item in records:
         by_id[item.source_id] = item
     return list(by_id.values())
+
+
+def _has_more(value: Any) -> bool:
+    """Accept the gateway's numeric or string 1/0 pagination flags."""
+    return value in (1, True, "1")
