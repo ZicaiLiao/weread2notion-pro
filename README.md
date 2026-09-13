@@ -9,6 +9,7 @@ Notion 的个人工具。
 
 - 微信读书 Agent Gateway 数据读取
 - Books、Annotations、Reading Days 三库自动创建与幂等 upsert
+- 自动创建 `WeRead 阅读中枢` 页面，集中链接三类数据
 - Source ID 去重、全量删除标记和增量同步
 - 本地配置模板与 GitHub Actions 工作流
 

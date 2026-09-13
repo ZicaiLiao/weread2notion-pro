@@ -54,6 +54,12 @@ class SyncCoordinator:
             records = _unique_records(self.source.fetch_records(self.mode))
             databases = self.notion.ensure_databases()
             result.databases = databases
+            prepare_sync = getattr(self.notion, "prepare_sync", None)
+            if callable(prepare_sync):
+                prepare_sync(databases)
+            ensure_dashboard = getattr(self.notion, "ensure_dashboard", None)
+            if callable(ensure_dashboard):
+                ensure_dashboard(databases)
             book_page_ids: dict[str, str] = {}
             for item in _ordered_records(records):
                 try:

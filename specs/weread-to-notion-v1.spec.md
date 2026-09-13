@@ -60,6 +60,12 @@ page:
 3. `WeRead Reading Days`: one page per local date, with duration seconds,
    readable duration, source period, source ID, fingerprint, and sync status.
 
+The first successful run also creates or reuses a `WeRead 阅读中枢` page under
+the parent page. It links to the three databases and documents the bookshelf,
+annotation, and reading-statistics entry points. Database filters and grouping
+remain native Notion views because the public Notion API does not provide a
+database-view creation endpoint.
+
 Categories, authors, and chapters remain properties and filtered Notion views;
 they are not separate databases. Reading Days intentionally have no book
 relation because the supported source response does not provide reliable
@@ -128,7 +134,7 @@ and `TIMEZONE` are non-secret variables or workflow defaults.
 
 1. Missing configuration exits before any network call.
 2. The first successful run provisions all three databases and the
-   Annotations-to-Books relation.
+   Annotations-to-Books relation, plus the idempotent reading hub page.
 3. Repeating an identical run creates no additional pages.
 4. Changed source records update their existing page.
 5. Duplicate destination Source IDs fail only the affected record.

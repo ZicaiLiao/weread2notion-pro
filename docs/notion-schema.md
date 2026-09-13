@@ -4,6 +4,12 @@ The application creates these databases below the configured parent page. The
 property names are stable integration identifiers; display labels may be
 localized later without changing source identity or sync behavior.
 
+It also creates one idempotent `WeRead 阅读中枢` page below the parent page. The
+page provides navigation links to the three databases and records the intended
+views for the bookshelf, annotations, and reading statistics. Notion's public
+API does not expose database-view configuration, so filters and grouping are
+still configured in the database itself.
+
 ## Books
 
 | Property | Notion type | Meaning |

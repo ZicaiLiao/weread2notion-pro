@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import time
 from typing import Any
 import ssl
 import urllib.error
@@ -41,6 +42,8 @@ class NotionClient:
         self.opener = opener
         self.context = _ssl_context()
         self.database_ids: dict[str, str] = {}
+        self._source_index: dict[str, dict[str, list[PageMatch]]] = {}
+        self._source_index_ready: set[str] = set()
 
     def request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         data = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -55,21 +58,27 @@ class NotionClient:
                 "Accept": "application/json",
             },
         )
-        try:
-            with self.opener(request, timeout=45, context=self.context) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
+        for attempt in range(6):
             try:
-                details = json.loads(exc.read().decode("utf-8"))
-                message = details.get("message", str(exc))
-            except ValueError:
-                message = str(exc)
-            raise NotionError(f"Notion 请求失败: {message}") from exc
-        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-            raise NotionError(f"Notion 网络请求失败: {exc}") from exc
-        if not isinstance(payload, dict):
-            raise NotionError("Notion 返回了非对象 JSON")
-        return payload
+                with self.opener(request, timeout=45, context=self.context) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                if not isinstance(payload, dict):
+                    raise NotionError("Notion 返回了非对象 JSON")
+                return payload
+            except urllib.error.HTTPError as exc:
+                try:
+                    details = json.loads(exc.read().decode("utf-8"))
+                    message = details.get("message", str(exc))
+                except (ValueError, AttributeError):
+                    message = str(exc)
+                if exc.code != 429 or attempt == 5:
+                    raise NotionError(f"Notion 请求失败: {message}") from exc
+                retry_delay = _retry_after(exc)
+                delay = retry_delay if retry_delay is not None else min(2 ** attempt, 30)
+                time.sleep(delay)
+            except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+                raise NotionError(f"Notion 网络请求失败: {exc}") from exc
+        raise NotionError(f"Notion 请求失败: {method} {path}")
 
     def ensure_databases(self, parent_page_id: str | None = None) -> dict[str, str]:
         parent_id = parent_page_id or self.parent_page_id
@@ -80,7 +89,41 @@ class NotionClient:
         annotations = self._find_or_create_database(parent_id, definitions[1])
         reading_days = self._find_or_create_database(parent_id, definitions[2])
         self.database_ids = {"books": books, "annotations": annotations, "reading_days": reading_days}
+        self._source_index.clear()
+        self._source_index_ready.clear()
         return self.database_ids
+
+    def prepare_sync(self, database_ids: dict[str, str]) -> None:
+        """Load each destination database once before record-level upserts."""
+        self._source_index.clear()
+        self._source_index_ready.clear()
+        for database_id in database_ids.values():
+            pages = self._paginate("POST", f"/databases/{database_id}/query", {"page_size": 100})
+            index: dict[str, list[PageMatch]] = {}
+            for page in pages:
+                match = _page_match(page)
+                if match.source_id:
+                    index.setdefault(match.source_id, []).append(match)
+            self._source_index[database_id] = index
+            self._source_index_ready.add(database_id)
+
+    def ensure_dashboard(self, database_ids: dict[str, str], parent_page_id: str | None = None) -> str:
+        parent_id = parent_page_id or self.parent_page_id
+        if not parent_id:
+            raise NotionError("未配置 Notion parent page ID")
+        title = "WeRead 阅读中枢"
+        existing = self._search_page(parent_id, title)
+        if existing:
+            return existing
+        response = self.request("POST", "/pages", {
+            "parent": {"type": "page_id", "page_id": parent_id},
+            "icon": {"type": "emoji", "emoji": "📚"},
+            "properties": {"title": {"title": _rich_text(title)}},
+            "children": _dashboard_blocks(database_ids),
+        })
+        if not response.get("id"):
+            raise NotionError("创建 Notion 阅读中枢失败")
+        return response["id"]
 
     def _find_or_create_database(self, parent_page_id: str, definition: DatabaseDefinition) -> str:
         existing = self._search_database(parent_page_id, definition.title)
@@ -144,6 +187,13 @@ class NotionClient:
             if match.fingerprint == item.fingerprint and match.sync_status == "正常":
                 return "unchanged", match.page_id
             self.request("PATCH", f"/pages/{match.page_id}", {"properties": properties})
+            self._cache_match(database_id, PageMatch(
+                match.page_id,
+                item.source_id,
+                item.fingerprint,
+                str(item.fields.get("Sync Status", "正常")),
+                item.title or item.source_id,
+            ))
             return "updated", match.page_id
         response = self.request("POST", "/pages", {
             "parent": {"database_id": database_id},
@@ -151,9 +201,18 @@ class NotionClient:
         })
         if not response.get("id"):
             raise NotionError(f"创建 Notion 页面失败: {item.source_id}")
+        self._cache_match(database_id, PageMatch(
+            response["id"],
+            item.source_id,
+            item.fingerprint,
+            str(item.fields.get("Sync Status", "正常")),
+            item.title or item.source_id,
+        ))
         return "created", response["id"]
 
     def find_by_source_id(self, database_id: str, source_id: str) -> list[PageMatch]:
+        if database_id in self._source_index_ready:
+            return list(self._source_index.get(database_id, {}).get(source_id, []))
         pages = self._paginate("POST", f"/databases/{database_id}/query", {
             "filter": {"property": "Source ID", "rich_text": {"equals": source_id}},
             "page_size": 100,
@@ -162,10 +221,13 @@ class NotionClient:
 
     def list_source_pages(self, database: str) -> list[dict[str, Any]]:
         database_id = self.database_ids[database]
-        pages = self._paginate("POST", f"/databases/{database_id}/query", {"page_size": 100})
+        if database_id in self._source_index_ready:
+            matches = [match for values in self._source_index[database_id].values() for match in values]
+        else:
+            pages = self._paginate("POST", f"/databases/{database_id}/query", {"page_size": 100})
+            matches = [_page_match(page) for page in pages]
         result = []
-        for page in pages:
-            match = _page_match(page)
+        for match in matches:
             if match.source_id:
                 result.append({
                     "page_id": match.page_id,
@@ -181,6 +243,7 @@ class NotionClient:
         if database == "books":
             properties["State"] = {"select": {"name": "已删除"}}
         self.request("PATCH", f"/pages/{page['page_id']}", {"properties": properties})
+        self._cache_match_for_page(page["page_id"], sync_status="已删除")
 
     def _properties_for(
         self,
@@ -212,6 +275,43 @@ class NotionClient:
             if matches:
                 return matches[0].page_id
         return None
+
+    def _search_page(self, parent_page_id: str, title: str) -> str | None:
+        payload = {
+            "query": title,
+            "filter": {"property": "object", "value": "page"},
+            "page_size": 100,
+        }
+        for result in self._paginate("POST", "/search", payload):
+            if _title_text(result.get("properties", {}).get("title", {}).get("title", [])) != title:
+                continue
+            result_parent = result.get("parent", {})
+            if result_parent.get("type") != "page_id":
+                continue
+            if _normalise_id(result_parent.get("page_id")) == _normalise_id(parent_page_id):
+                return result.get("id")
+        return None
+
+    def _cache_match(self, database_id: str, match: PageMatch) -> None:
+        if database_id not in self._source_index_ready:
+            return
+        self._source_index.setdefault(database_id, {}).setdefault(match.source_id, [])
+        matches = self._source_index[database_id][match.source_id]
+        for index, existing in enumerate(matches):
+            if existing.page_id == match.page_id:
+                matches[index] = match
+                return
+        matches.append(match)
+
+    def _cache_match_for_page(self, page_id: str, sync_status: str) -> None:
+        for index in self._source_index.values():
+            for source_id, matches in index.items():
+                for position, match in enumerate(matches):
+                    if match.page_id == page_id:
+                        matches[position] = PageMatch(
+                            match.page_id, match.source_id, match.fingerprint, sync_status, match.title,
+                        )
+                        return
 
 
 def _page_match(page: dict[str, Any]) -> PageMatch:
@@ -257,6 +357,41 @@ def _title_text(values: list[dict[str, Any]] | None) -> str:
 def _rich_text(value: str) -> list[dict[str, Any]]:
     chunks = [value[index:index + 1900] for index in range(0, len(value), 1900)] or [""]
     return [{"type": "text", "text": {"content": chunk}} for chunk in chunks]
+
+
+def _retry_after(error: urllib.error.HTTPError) -> float | None:
+    value = error.headers.get("Retry-After") if error.headers else None
+    try:
+        return max(0.0, min(float(value), 60.0)) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _dashboard_blocks(database_ids: dict[str, str]) -> list[dict[str, Any]]:
+    def text_block(block_type: str, content: str) -> dict[str, Any]:
+        return {"object": "block", "type": block_type, block_type: {"rich_text": [{"type": "text", "text": {"content": content}}]}}
+
+    blocks: list[dict[str, Any]] = [
+        text_block("heading_1", "WeRead 阅读中枢"),
+        text_block("paragraph", "微信读书数据会自动同步到下方数据库。"),
+        {"object": "block", "type": "divider", "divider": {}},
+        text_block("heading_2", "数据入口"),
+    ]
+    labels = (("books", "书架 / 阅读进度"), ("annotations", "笔记与划线"), ("reading_days", "阅读统计"))
+    for key, label in labels:
+        blocks.append(text_block("paragraph", label))
+        blocks.append({
+            "object": "block",
+            "type": "link_to_page",
+            "link_to_page": {"type": "database_id", "database_id": database_ids[key]},
+        })
+    blocks.extend([
+        text_block("heading_2", "推荐视图"),
+        text_block("bulleted_list_item", "书架：按 State 分组，按 Last Read 倒序"),
+        text_block("bulleted_list_item", "笔记与划线：按 Type 分组，按 Created At 倒序"),
+        text_block("bulleted_list_item", "阅读统计：按 Date 倒序，查看每日阅读时长"),
+    ])
+    return blocks
 
 
 def _normalise_id(value: str | None) -> str:

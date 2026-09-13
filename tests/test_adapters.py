@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import unittest
+import urllib.error
+from email.message import Message
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from wread2notion.config import Settings
@@ -164,6 +167,78 @@ class NotionAdapterTests(unittest.TestCase):
         page_payload = next(payload for url, payload in calls if url.endswith("/pages"))
         self.assertEqual(page_payload["properties"]["Book"]["relation"], [{"id": "book-page"}])
         self.assertEqual(page_payload["properties"]["Source ID"]["rich_text"][0]["text"]["content"], "note:1")
+
+    def test_prepare_sync_loads_source_index_once(self):
+        calls: list[str] = []
+
+        def opener(request, **_kwargs):
+            calls.append(request.full_url)
+            return FakeResponse({
+                "results": [{
+                    "id": "book-page",
+                    "properties": {
+                        "Name": {"title": [{"plain_text": "一本书"}]},
+                        "Source ID": {"rich_text": [{"plain_text": "book:1"}]},
+                        "Fingerprint": {"rich_text": [{"plain_text": "fingerprint"}]},
+                        "Sync Status": {"select": {"name": "正常"}},
+                    },
+                }],
+                "has_more": False,
+            })
+
+        client = NotionClient("secret", opener=opener)
+        client.prepare_sync({"books": "books-db"})
+
+        matches = client.find_by_source_id("books-db", "book:1")
+        self.assertEqual([match.page_id for match in matches], ["book-page"])
+        self.assertEqual(len(calls), 1)
+
+    def test_request_retries_notion_rate_limit(self):
+        attempts = 0
+        headers = Message()
+        headers["Retry-After"] = "0"
+
+        def opener(_request, **_kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise urllib.error.HTTPError("https://notion.test/x", 429, "rate limited", headers, None)
+            return FakeResponse({"ok": True})
+
+        client = NotionClient("secret", opener=opener)
+        with patch("wread2notion.notion.time.sleep") as sleep:
+            self.assertEqual(client.request("GET", "/x"), {"ok": True})
+
+        self.assertEqual(attempts, 2)
+        sleep.assert_called_once_with(0.0)
+
+    def test_dashboard_is_created_once_with_database_links(self):
+        calls: list[tuple[str, dict]] = []
+
+        def opener(request, **_kwargs):
+            payload = json.loads(request.data.decode("utf-8")) if request.data else {}
+            calls.append((request.full_url, payload))
+            if request.full_url.endswith("/search"):
+                return FakeResponse({"results": []})
+            if request.full_url.endswith("/pages"):
+                return FakeResponse({"id": "dashboard-page"})
+            raise AssertionError(request.full_url)
+
+        client = NotionClient("secret", parent_page_id="parent", opener=opener)
+        dashboard_id = client.ensure_dashboard({
+            "books": "books-db",
+            "annotations": "annotations-db",
+            "reading_days": "days-db",
+        })
+
+        self.assertEqual(dashboard_id, "dashboard-page")
+        page_payload = next(payload for url, payload in calls if url.endswith("/pages"))
+        links = [
+            block["link_to_page"]["database_id"]
+            for block in page_payload["children"]
+            if block["type"] == "link_to_page"
+        ]
+        self.assertEqual(links, ["books-db", "annotations-db", "days-db"])
 
 
 if __name__ == "__main__":
