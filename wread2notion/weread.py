@@ -57,7 +57,19 @@ class WeReadClient:
             raise WeReadError("微信读书返回了非对象 JSON")
         if payload.get("upgrade_info"):
             upgrade = payload["upgrade_info"]
-            message = upgrade.get("message", "微信读书 skill 需要升级") if isinstance(upgrade, dict) else str(upgrade)
+            if isinstance(upgrade, dict):
+                message = upgrade.get("message", "微信读书 skill 需要升级")
+                upgrade_url = upgrade.get("upgrade_url") or upgrade.get("url")
+                latest_version = upgrade.get("version") or upgrade.get("latest_version")
+                details = []
+                if latest_version:
+                    details.append(f"latest_version={latest_version}")
+                if upgrade_url:
+                    details.append(f"upgrade_url={upgrade_url}")
+                if details:
+                    message = f"{message} ({', '.join(details)})"
+            else:
+                message = str(upgrade)
             raise WeReadError(message)
         if payload.get("errcode", 0) not in (0, "0", None):
             raise WeReadError(payload.get("errmsg", f"微信读书接口错误: {payload['errcode']}"))
